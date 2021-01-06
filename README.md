@@ -1,5 +1,7 @@
 # DynamicBoneCopy
-Copies Dynamic Bones and their colliders to the next avatar
+Copies Dynamic Bones and their colliders to the next avatar.
+
+Remeber to have Dynamic Bones importer BEFORE trying to use this tool.
 
 Steps
 1. Select the avatar to be your source (Prefab or from scene)
