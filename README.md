@@ -10,3 +10,5 @@ Steps
 4. Click the "Select Target" button
 5. Press "Copy/Update"
 6. Profit
+
+Discord: https://discord.gg/Xgn8zK3zb7
