@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using UnityEditor;
 using System.Collections.Generic;
 using System;
@@ -9,7 +9,6 @@ public class DBCopy : EditorWindow
     //Attributes
     GameObject source;
     GameObject target;
-    Dictionary<string, GameObject> targetBones = new Dictionary<string, GameObject>(); //Create dictionary to hold all the bones
 
     [MenuItem("Yelby/Dynamic Bones Copy")]
     public static void ShowWindow()
@@ -21,10 +20,10 @@ public class DBCopy : EditorWindow
     {
         GUILayout.Label("Transfer", EditorStyles.boldLabel);
 
+        EditorGUIUtility.labelWidth = 50;
         //Source
         EditorGUILayout.BeginHorizontal();
-        GUILayout.Label("Source: ");
-        source = EditorGUILayout.ObjectField(source, typeof(GameObject), false) as GameObject;
+        source = EditorGUILayout.ObjectField("Source: ",source, typeof(GameObject), true) as GameObject;
 
         if (GUILayout.Button("Set Source"))
         {
@@ -35,8 +34,7 @@ public class DBCopy : EditorWindow
 
         //Target
         EditorGUILayout.BeginHorizontal();
-        GUILayout.Label("Target: ");
-        target = EditorGUILayout.ObjectField(target, typeof(GameObject), false) as GameObject;
+        target = EditorGUILayout.ObjectField("Target: ",target, typeof(GameObject), true) as GameObject;
 
         if (GUILayout.Button("Set Target"))
         {
@@ -48,7 +46,8 @@ public class DBCopy : EditorWindow
         //Dynamic Bone Magic
         if (GUILayout.Button("Copy/Update"))
         {
-            copyComps(source, target);
+            copyColliders(source, target);
+            copyDynamicBones(source, target);
             Debug.Log("Avatar Copy");
         }
         if(GUILayout.Button("Destroy Target Dynamic Bones & Colliders"))
@@ -57,124 +56,133 @@ public class DBCopy : EditorWindow
         }
     }
     //~~~~Methods~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    void copyComps(GameObject sTree, GameObject tTree)
+    void copyColliders(GameObject source, GameObject target)
     {
-        //Do Magic bone work
-        targetBones.Clear();
+        string targetRootName = target.name;
+        target.name = source.name;
+
+        //Do Bone unpacking
+        //Target
+        Dictionary<string, GameObject> targetBones = new Dictionary<string, GameObject>(); //Creating dictionary
         targetBones.Add(target.name, target); //add root to dictionary
-        UnpackBones(target); //Put bones in dictionary
+        targetBones = UnpackBones(target, targetBones); //Put bones in dictionary
+        //Source
+        Dictionary<string, GameObject> sourceBones = new Dictionary<string, GameObject>(); //Creating dictionary
+        sourceBones.Add(source.name, source); //add root to dictionary
+        sourceBones = UnpackBones(source, sourceBones); //Put bones in dictionary
 
-        //Colliders
-        Transform[] sourceChildren = sTree.GetComponentsInChildren<Transform>(); //List of all children
-        foreach (Transform sChild in sourceChildren) //Go through all children looking for stuff
+        foreach(var sourceBoneName in sourceBones.Keys) //Values list of GameObjects
         {
-            if (sChild.gameObject.GetComponent<DynamicBoneCollider>() != null)
+            if(targetBones.ContainsKey(sourceBoneName)) //Bone of the same name
             {
-                var sChildComps = sChild.gameObject.GetComponent<DynamicBoneCollider>(); //Source componenet
-
-                Transform[] targetChildren = tTree.gameObject.GetComponentsInChildren<Transform>(); //All target transforms
-                foreach (Transform tChild in targetChildren)
+                var targetBoneColliderList = targetBones[sourceBoneName].GetComponents<DynamicBoneCollider>();//List of all bones on target
+                for (int i = 0; i < targetBoneColliderList.Length; i++)
                 {
-                    if (tChild.name == sChild.name)
+                    DestroyImmediate(targetBoneColliderList[i]); //Destroy all Dynamic Bone Colliders on target
+                }
+                var sourceBoneColliderList = sourceBones[sourceBoneName].GetComponents<DynamicBoneCollider>();//List of all bones on source
+                foreach (var sourceBoneCollider in sourceBoneColliderList)
+                {
+                    var newTargetBone = targetBones[sourceBoneName].AddComponent<DynamicBoneCollider>();
+
+                    Type boneColliderType = typeof(DynamicBoneCollider);
+                    FieldInfo[] boneColliderFields = boneColliderType.GetFields();
+                    foreach (var field in boneColliderFields)
                     {
-                        Debug.Log("~Collider~ Source: " + sChild.name + " {" + sChild.transform.GetHierarchyPath() + "} " +
-                                  "Target: " + tChild.name + " {" + tChild.transform.GetHierarchyPath() + "}");
-
-                        //Check for Collider is exist
-                        DynamicBoneCollider tChildComps = tChild.gameObject.GetComponent<DynamicBoneCollider>();
-                        if (tChildComps == null)
-                        {
-                            tChildComps = tChild.gameObject.AddComponent<DynamicBoneCollider>();
-                        }
-
-                        //Copy Settings
-                        Type type = typeof(DynamicBoneCollider);
-                        FieldInfo[] info = type.GetFields();
-                        foreach (var field in info)
-                        {
-                                field.SetValue(tChildComps, field.GetValue(sChildComps));
-                        }
+                        field.SetValue(newTargetBone, field.GetValue(sourceBoneCollider));
                     }
                 }
             }
         }
+        target.name = targetRootName;
+    }
 
-        //Dynamic Bones
-        foreach(Transform sChild in sourceChildren)
-        { 
-            if(sChild.gameObject.GetComponent<DynamicBone>() != null) //Is it a dynamic bone?
+    void copyDynamicBones(GameObject source, GameObject target)
+    {
+        string targetRootName = target.name;
+        target.name = source.name;
+
+        //Do Bone unpacking
+        //Target
+        Dictionary<string, GameObject> targetBones = new Dictionary<string, GameObject>(); //Creating dictionary
+        targetBones.Add(target.name, target); //add root to dictionary
+        targetBones = UnpackBones(target, targetBones); //Put bones in dictionary
+        //Source
+        Dictionary<string, GameObject> sourceBones = new Dictionary<string, GameObject>(); //Creating dictionary
+        sourceBones.Add(source.name, source); //add root to dictionary
+        sourceBones = UnpackBones(source, sourceBones); //Put bones in dictionary
+
+        foreach (var sourceBoneName in sourceBones.Keys) //Values list of GameObjects
+        {
+            if (targetBones.ContainsKey(sourceBoneName)) //Bone of the same name
             {
-                var sChildComps = sChild.gameObject.GetComponent<DynamicBone>(); //Source componenet
-                
-                Transform[] targetChildren = tTree.gameObject.GetComponentsInChildren<Transform>(); //All target transforms
-                foreach(Transform tChild in targetChildren)
+                var targetDynamicBoneList = targetBones[sourceBoneName].GetComponents<DynamicBone>();//List of all bones on target
+                for (int i = 0; i < targetDynamicBoneList.Length; i++)
                 {
-                    if (tChild.name == sChild.name)
+                    DestroyImmediate(targetDynamicBoneList[i]); //Destroy all DynamicBones on target
+                }
+                var sourceDynamicBoneList = sourceBones[sourceBoneName].GetComponents<DynamicBone>();//List of all bones on source
+                foreach (var sourceDynamicBone in sourceDynamicBoneList)
+                {
+                    var newTargetBone = targetBones[sourceBoneName].AddComponent<DynamicBone>();
+                    newTargetBone.m_Root = targetBones[sourceDynamicBone.m_Root.name].transform; //Sets Root
+
+                    Type dynamicBoneType = typeof(DynamicBone);
+                    FieldInfo[] dynamicBoneFields = dynamicBoneType.GetFields();
+                    //General Settings
+                    foreach (var field in dynamicBoneFields)
                     {
-                        Debug.Log("~DynBone~ Source: " + sChild.name + " {" + sChild.transform.GetHierarchyPath() + "} " +
-                                  "Target: " + tChild.name + " {" + tChild.transform.GetHierarchyPath() + "}");
-
-                        //Find Bones if exist update
-                        DynamicBone tChildComps = tChild.gameObject.GetComponent<DynamicBone>();
-                        if(tChildComps == null)
+                        if (field.Name == "m_Root" || field.Name == "m_Colliders" || field.Name == "m_Exclusions")
                         {
-                            tChildComps = tChild.gameObject.AddComponent<DynamicBone>();
+                            continue;
                         }
-
-                        //Dynamic Bones Resources
-                        tChildComps.m_Root = tChild; //Sets Root
-
-                        //Copy Properties
-                        Type type = typeof(DynamicBone);
-                        FieldInfo[] info = type.GetFields();
-                        foreach(var field in info)
+                        else
                         {
-                            if (field.Name == "m_Root" || field.Name == "m_Colliders" || field.Name == "m_Exclusions")
-                            {
-                                continue;
-                            }
-                            else
-                            {
-                                field.SetValue(tChildComps, field.GetValue(sChildComps));
-                            }
+                            field.SetValue(newTargetBone, field.GetValue(sourceDynamicBone));
                         }
-
-                        //Colliders
-                        tChildComps.m_Colliders = new List<DynamicBoneColliderBase>();
-                        foreach (var sourceCollider in sChildComps.m_Colliders)
+                    }
+                    //Colliders
+                    newTargetBone.m_Colliders = new List<DynamicBoneColliderBase>();
+                    foreach (var sourceCollider in sourceDynamicBone.m_Colliders)
+                    {
+                        if(sourceCollider != null)
                         {
                             string nameToFind = sourceCollider.gameObject.name;
-                            if (sourceCollider != null && targetBones.ContainsKey(nameToFind))
+                            if (targetBones.ContainsKey(nameToFind))
                             {
-                                tChildComps.m_Colliders.Add(targetBones[nameToFind].GetComponent<DynamicBoneColliderBase>());
+                                newTargetBone.m_Colliders.Add(targetBones[nameToFind].GetComponent<DynamicBoneColliderBase>());
                             }
                         }
+                    }
 
-                        //Exclusions
-                        tChildComps.m_Exclusions = new List<Transform>();
-                        foreach(var sourceExclusion in sChildComps.m_Exclusions)
+                    //Exclusions
+                    newTargetBone.m_Exclusions = new List<Transform>();
+                    foreach (var sourceExclusion in sourceDynamicBone.m_Exclusions)
+                    {
+                        if(sourceExclusion != null)
                         {
                             string nameToFind = sourceExclusion.gameObject.name;
-                            if (sourceExclusion != null && targetBones.ContainsKey(nameToFind))
+                            if (targetBones.ContainsKey(nameToFind))
                             {
-                                tChildComps.m_Exclusions.Add(targetBones[nameToFind].transform);
+                                newTargetBone.m_Exclusions.Add(targetBones[nameToFind].transform);
                             }
                         }
                     }
                 }
             }
         }
-        AssetDatabase.Refresh();
+        target.name = targetRootName;
     }
 
     //Goes through skeleton
-    void UnpackBones (GameObject bone)
+    Dictionary<string, GameObject> UnpackBones (GameObject bone, Dictionary<string, GameObject> targetBones)
     {
-        foreach(Transform child in bone.transform)
+        foreach (Transform child in bone.transform)
         {
             targetBones.Add(child.name, child.gameObject);
-            UnpackBones(child.gameObject);//Recursion
+            targetBones = UnpackBones(child.gameObject, targetBones); //Recursion
         }
+        return targetBones;
     }
 
     void DestroyDynamicBones()
