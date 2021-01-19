@@ -12,5 +12,3 @@ Steps
 6. Profit
 
 Discord: https://discord.gg/Xgn8zK3zb7
-
-borger
