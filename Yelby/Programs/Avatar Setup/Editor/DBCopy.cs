@@ -9,6 +9,7 @@ public class DBCopy : EditorWindow
     //Attributes
     GameObject source;
     GameObject target;
+    bool success = true;
 
     [MenuItem("Yelby/Dynamic Bones Copy")]
     public static void ShowWindow()
@@ -18,7 +19,7 @@ public class DBCopy : EditorWindow
 
     void OnGUI()
     {
-        GUILayout.Label("Transfer", EditorStyles.boldLabel);
+        GUILayout.Label("Transfer [1.4]", EditorStyles.boldLabel);
 
         EditorGUIUtility.labelWidth = 50;
         //Source
@@ -39,7 +40,7 @@ public class DBCopy : EditorWindow
         if (GUILayout.Button("Set Target"))
         {
             target = Selection.activeGameObject;
-            Debug.Log("Source: " + target.name);
+            Debug.Log("Target: " + target.name);
         }
         EditorGUILayout.EndHorizontal();
 
@@ -47,12 +48,22 @@ public class DBCopy : EditorWindow
         if (GUILayout.Button("Copy/Update"))
         {
             copyColliders(source, target);
-            copyDynamicBones(source, target);
-            Debug.Log("Avatar Copy");
+            if(success == true)
+            {
+                copyDynamicBones(source, target);
+                EditorUtility.DisplayDialog("Dynamic Bones Copier", "Successfully! "+source.name+"-->"+target.name, "Ok");
+                Debug.Log("Dynamic Bones Copier: Success");
+            }
+            else
+            {
+                EditorUtility.DisplayDialog("Dynamic Bones Copier", "Failed to Copy", "Ok");
+                Debug.LogWarning("Dynamic Bones Copier: Failed");
+            }
         }
         if(GUILayout.Button("Destroy Target Dynamic Bones & Colliders"))
         {
             DestroyDynamicBones();
+            EditorUtility.DisplayDialog("Dynamic Bones Copier", "Dynamic Bones Removed", "Ok");
         }
     }
     //~~~~Methods~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -65,11 +76,25 @@ public class DBCopy : EditorWindow
         //Target
         Dictionary<string, GameObject> targetBones = new Dictionary<string, GameObject>(); //Creating dictionary
         targetBones.Add(target.name, target); //add root to dictionary
-        targetBones = UnpackBones(target, targetBones); //Put bones in dictionary
+        targetBones = UnpackBones(target, targetBones, "Target"); //Put bones in dictionary
+        if(targetBones.ContainsKey("CatIsEmpty"))
+        {
+            target.name = targetRootName;
+            success = false;
+            return;
+        }
+
+
         //Source
         Dictionary<string, GameObject> sourceBones = new Dictionary<string, GameObject>(); //Creating dictionary
         sourceBones.Add(source.name, source); //add root to dictionary
-        sourceBones = UnpackBones(source, sourceBones); //Put bones in dictionary
+        sourceBones = UnpackBones(source, sourceBones, "Source"); //Put bones in dictionary
+        if (sourceBones.ContainsKey("CatIsEmpty"))
+        {
+            target.name = targetRootName;
+            success = false;
+            return;
+        }
 
         foreach(var sourceBoneName in sourceBones.Keys) //Values list of GameObjects
         {
@@ -95,6 +120,7 @@ public class DBCopy : EditorWindow
             }
         }
         target.name = targetRootName;
+        success = true;
     }
 
     void copyDynamicBones(GameObject source, GameObject target)
@@ -106,11 +132,22 @@ public class DBCopy : EditorWindow
         //Target
         Dictionary<string, GameObject> targetBones = new Dictionary<string, GameObject>(); //Creating dictionary
         targetBones.Add(target.name, target); //add root to dictionary
-        targetBones = UnpackBones(target, targetBones); //Put bones in dictionary
+        targetBones = UnpackBones(target, targetBones, "Target"); //Put bones in dictionary
+        if (targetBones.ContainsKey("CatIsEmpty"))
+        {
+            target.name = targetRootName;
+            return;
+        }
+
         //Source
         Dictionary<string, GameObject> sourceBones = new Dictionary<string, GameObject>(); //Creating dictionary
         sourceBones.Add(source.name, source); //add root to dictionary
-        sourceBones = UnpackBones(source, sourceBones); //Put bones in dictionary
+        sourceBones = UnpackBones(source, sourceBones, "Source"); //Put bones in dictionary
+        if (sourceBones.ContainsKey("CatIsEmpty"))
+        {
+            target.name = targetRootName;
+            return;
+        }
 
         foreach (var sourceBoneName in sourceBones.Keys) //Values list of GameObjects
         {
@@ -175,12 +212,20 @@ public class DBCopy : EditorWindow
     }
 
     //Goes through skeleton
-    Dictionary<string, GameObject> UnpackBones (GameObject bone, Dictionary<string, GameObject> targetBones)
+    Dictionary<string, GameObject> UnpackBones (GameObject bone, Dictionary<string, GameObject> targetBones, String name)
     {
         foreach (Transform child in bone.transform)
         {
+            if (targetBones.ContainsKey(child.name))
+            {
+                EditorUtility.DisplayDialog("Dynamic Bones Copier", "Duplicate Name: "+child.name + " ["+name+"]", "Ok");
+                Debug.LogWarning("Dynamic Bones Copier: [Duplicate Name: "+child.name+ "]"+ "{"+name+"}");
+                targetBones.Clear();
+                targetBones.Add("CatIsEmpty", null);
+                return targetBones;
+            }
             targetBones.Add(child.name, child.gameObject);
-            targetBones = UnpackBones(child.gameObject, targetBones); //Recursion
+            targetBones = UnpackBones(child.gameObject, targetBones, name); //Recursion
         }
         return targetBones;
     }
@@ -197,14 +242,14 @@ public class DBCopy : EditorWindow
                 if (child.gameObject.GetComponent<DynamicBone>() != null)
                 {
                     DestroyImmediate(child.gameObject.GetComponent<DynamicBone>(), true);
-                    Debug.Log("Removed:" + child.name + " {" + child.transform.GetHierarchyPath() + "} ");
+                    //Debug.Log("Removed:" + child.name + " {" + child.transform.GetHierarchyPath() + "} ");
                     total++;
                 }
                 //Destroy Colliders
                 if (child.gameObject.GetComponent<DynamicBoneCollider>() != null)
                 {
                     DestroyImmediate(child.gameObject.GetComponent<DynamicBoneCollider>(), true);
-                    Debug.Log("Removed:" + child.name + " {" + child.transform.GetHierarchyPath() + "} ");
+                    //Debug.Log("Removed:" + child.name + " {" + child.transform.GetHierarchyPath() + "} ");
                     total++;
                 }
             }
