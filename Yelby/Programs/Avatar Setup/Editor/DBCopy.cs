@@ -10,6 +10,7 @@ public class DBCopy : EditorWindow
     GameObject source;
     GameObject target;
     bool success = true;
+    bool debug = false;
 
     [MenuItem("Yelby/Dynamic Bones Copy")]
     public static void ShowWindow()
@@ -19,7 +20,7 @@ public class DBCopy : EditorWindow
 
     void OnGUI()
     {
-        GUILayout.Label("Transfer [1.4]", EditorStyles.boldLabel);
+        GUILayout.Label("Transfer [1.5]", EditorStyles.boldLabel);
 
         EditorGUIUtility.labelWidth = 50;
         //Source
@@ -81,8 +82,10 @@ public class DBCopy : EditorWindow
         {
             target.name = targetRootName;
             success = false;
+            if(debug) Debug.LogError("Collider: Multiple Bone Names [Target]");
             return;
         }
+        if (debug) Debug.Log("Collider: Target Mapped [Target] " + targetBones.Count);
 
 
         //Source
@@ -93,10 +96,12 @@ public class DBCopy : EditorWindow
         {
             target.name = targetRootName;
             success = false;
+            if (debug) Debug.LogError("Collider: Multiple Bone Names [Source]");
             return;
         }
+        if (debug) Debug.Log("Collider: Source Mapped [Source] " + sourceBones.Count);
 
-        foreach(var sourceBoneName in sourceBones.Keys) //Values list of GameObjects
+        foreach (var sourceBoneName in sourceBones.Keys) //Values list of GameObjects
         {
             if(targetBones.ContainsKey(sourceBoneName)) //Bone of the same name
             {
@@ -121,6 +126,7 @@ public class DBCopy : EditorWindow
         }
         target.name = targetRootName;
         success = true;
+        if (debug) Debug.Log("Collider: Colliders Transfered");
     }
 
     void copyDynamicBones(GameObject source, GameObject target)
@@ -136,8 +142,10 @@ public class DBCopy : EditorWindow
         if (targetBones.ContainsKey("CatIsEmpty"))
         {
             target.name = targetRootName;
+            if (debug) Debug.LogError("Dynamic: Multiple Bone Names [Target]");
             return;
         }
+        if (debug) Debug.Log("Dynamic: Target Mapped [Target] " + targetBones.Count);
 
         //Source
         Dictionary<string, GameObject> sourceBones = new Dictionary<string, GameObject>(); //Creating dictionary
@@ -146,13 +154,17 @@ public class DBCopy : EditorWindow
         if (sourceBones.ContainsKey("CatIsEmpty"))
         {
             target.name = targetRootName;
+            if (debug) Debug.LogError("Dynamic: Multiple Bone Names [Source]");
             return;
         }
+        if (debug) Debug.Log("Dynamic: Source Mapped [Source] " + sourceBones.Count);
 
         foreach (var sourceBoneName in sourceBones.Keys) //Values list of GameObjects
         {
+            if (debug) Debug.LogWarning("Dynamic: FOREACH - " + sourceBoneName);
             if (targetBones.ContainsKey(sourceBoneName)) //Bone of the same name
             {
+                if (debug) Debug.LogWarning("Dynamic: IF - " + sourceBoneName);
                 var targetDynamicBoneList = targetBones[sourceBoneName].GetComponents<DynamicBone>();//List of all bones on target
                 for (int i = 0; i < targetDynamicBoneList.Length; i++)
                 {
@@ -161,6 +173,12 @@ public class DBCopy : EditorWindow
                 var sourceDynamicBoneList = sourceBones[sourceBoneName].GetComponents<DynamicBone>();//List of all bones on source
                 foreach (var sourceDynamicBone in sourceDynamicBoneList)
                 {
+                    if (!targetBones.ContainsKey(sourceDynamicBone.m_Root.name))
+                    {
+                        //target.name = targetRootName;
+                        continue;
+                    }
+
                     var newTargetBone = targetBones[sourceBoneName].AddComponent<DynamicBone>();
                     newTargetBone.m_Root = targetBones[sourceDynamicBone.m_Root.name].transform; //Sets Root
 
@@ -209,6 +227,7 @@ public class DBCopy : EditorWindow
             }
         }
         target.name = targetRootName;
+        if (debug) Debug.LogError("Dynamic: Dynamic Bones Transfered");
     }
 
     //Goes through skeleton
