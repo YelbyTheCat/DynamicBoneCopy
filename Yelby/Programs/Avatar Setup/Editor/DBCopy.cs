@@ -3,14 +3,27 @@ using UnityEditor;
 using System.Collections.Generic;
 using System;
 using System.Reflection;
+using System.Linq;
 
 public class DBCopy : EditorWindow
 {
-    //Attributes
+    //Overlap
     GameObject source;
+
+    //Copier
     GameObject target;
     bool success = true;
     bool debug = false;
+
+    //Existing
+    List<GameObject> dynamicBoneList = new List<GameObject>();
+    List<GameObject> dynamicBoneColliderList = new List<GameObject>();
+    List<bool> bonesForColliders = new List<bool>();
+    List<bool> collidersToAdd = new List<bool>();
+
+    //Toolbar
+    int toolBar = 0;
+    string[] toolBarSections = { "Copier", "Existing" };
 
     [MenuItem("Yelby/Dynamic Bones Copy")]
     public static void ShowWindow()
@@ -20,9 +33,11 @@ public class DBCopy : EditorWindow
 
     void OnGUI()
     {
-        GUILayout.Label("Transfer [1.5]", EditorStyles.boldLabel);
-
+        GUILayout.Label("Transfer [1.6]", EditorStyles.boldLabel);
         EditorGUIUtility.labelWidth = 50;
+
+        toolBar = GUILayout.Toolbar(toolBar, toolBarSections);
+
         //Source
         EditorGUILayout.BeginHorizontal();
         source = EditorGUILayout.ObjectField("Source: ",source, typeof(GameObject), true) as GameObject;
@@ -34,38 +49,131 @@ public class DBCopy : EditorWindow
         }
         EditorGUILayout.EndHorizontal();
 
-        //Target
-        EditorGUILayout.BeginHorizontal();
-        target = EditorGUILayout.ObjectField("Target: ",target, typeof(GameObject), true) as GameObject;
-
-        if (GUILayout.Button("Set Target"))
-        {
-            target = Selection.activeGameObject;
-            Debug.Log("Target: " + target.name);
-        }
-        EditorGUILayout.EndHorizontal();
-
-        //Dynamic Bone Magic
-        if (GUILayout.Button("Copy/Update"))
-        {
-            copyColliders(source, target);
-            if(success == true)
+        if(source != null)
+            switch(toolBar)
             {
-                copyDynamicBones(source, target);
-                EditorUtility.DisplayDialog("Dynamic Bones Copier", "Successfully! "+source.name+"-->"+target.name, "Ok");
-                Debug.Log("Dynamic Bones Copier: Success");
-            }
-            else
-            {
-                EditorUtility.DisplayDialog("Dynamic Bones Copier", "Failed to Copy", "Ok");
-                Debug.LogWarning("Dynamic Bones Copier: Failed");
-            }
+                case 0:
+                    //Target
+                    EditorGUILayout.BeginHorizontal();
+                    target = EditorGUILayout.ObjectField("Target: ", target, typeof(GameObject), true) as GameObject;
+
+                    if (GUILayout.Button("Set Target"))
+                    {
+                        target = Selection.activeGameObject;
+                        Debug.Log("Target: " + target.name);
+                    }
+                    EditorGUILayout.EndHorizontal();
+
+                    //Dynamic Bone Magic
+                    if (GUILayout.Button("Copy/Update"))
+                    {
+                        copyColliders(source, target);
+                        if (success == true)
+                        {
+                            copyDynamicBones(source, target);
+                            EditorUtility.DisplayDialog("Dynamic Bones Copier", "Successfully! " + source.name + "-->" + target.name, "Ok");
+                            Debug.Log("Dynamic Bones Copier: Success");
+                        }
+                        else
+                        {
+                            EditorUtility.DisplayDialog("Dynamic Bones Copier", "Failed to Copy", "Ok");
+                            Debug.LogWarning("Dynamic Bones Copier: Failed");
+                        }
+                    }
+                    if (GUILayout.Button("Destroy Target Dynamic Bones & Colliders"))
+                    {
+                        DestroyDynamicBones();
+                        EditorUtility.DisplayDialog("Dynamic Bones Copier", "Dynamic Bones Removed", "Ok");
+                    }
+                    break;
+                case 1:
+                    dynamicBoneList.Clear();
+                    dynamicBoneColliderList.Clear();
+
+                    //Bones
+                    GUILayout.Label("Dynamic Bones");
+                    dynamicBoneList = ListDynamicComponents(source, dynamicBoneList, true);
+
+                    for (int i = 0; i < dynamicBoneList.Count; i++)
+                    {
+                        GUILayout.BeginHorizontal();
+                        dynamicBoneList[i] = EditorGUILayout.ObjectField(dynamicBoneList[i], typeof(GameObject), true) as GameObject;
+                        if (dynamicBoneList.Count > bonesForColliders.Count)
+                            bonesForColliders.Add(default);
+                        bonesForColliders[i] = EditorGUILayout.Toggle(bonesForColliders[i]);
+                        GUILayout.EndHorizontal();
+                    }
+                    
+                    //Colliders
+                    GUILayout.Label("Colliders");
+                    dynamicBoneColliderList = ListDynamicComponents(source, dynamicBoneColliderList, false);
+
+                    for (int i = 0; i < dynamicBoneColliderList.Count; i++)
+                    {
+                        GUILayout.BeginHorizontal();
+                        dynamicBoneColliderList[i] = EditorGUILayout.ObjectField(dynamicBoneColliderList[i], typeof(GameObject), true) as GameObject;
+                        if (dynamicBoneColliderList.Count > collidersToAdd.Count)
+                            collidersToAdd.Add(default);
+                        collidersToAdd[i] = EditorGUILayout.Toggle(collidersToAdd[i]);
+                        GUILayout.EndHorizontal();
+                    }
+
+                    //Add colliders
+                    if(GUILayout.Button("Add Colliders to Active Bone(s)"))
+                    {
+                        int toActiveBones = 0;
+                        for (int i = 0; i < bonesForColliders.Count; i++)
+                            if (bonesForColliders[i])
+                                toActiveBones++;
+                        if (toActiveBones == 0)
+                        {
+                            break;
+                        }
+
+                        int toActiveColliders = 0;
+                        for (int i = 0; i < collidersToAdd.Count; i++)
+                            if (collidersToAdd[i])
+                                toActiveColliders++;
+                        if (toActiveColliders == 0)
+                        {
+                            break;
+                        }
+
+                        List<DynamicBoneColliderBase> colliderList = new List<DynamicBoneColliderBase>();
+                        for(int i = 0; i < collidersToAdd.Count; i++)
+                        {
+                            if(collidersToAdd[i])
+                            {
+                                colliderList.Add(dynamicBoneColliderList[i].GetComponent<DynamicBoneColliderBase>());
+                            }
+                        }
+
+                        for (int i = 0; i < bonesForColliders.Count; i++)
+                        {
+                            if(bonesForColliders[i])
+                            {
+                                var boneColliderList = dynamicBoneList[i].GetComponent<DynamicBone>().m_Colliders;
+                                boneColliderList.RemoveAll(item => item == null);
+                                if (boneColliderList.Count == 0)
+                                {
+                                    boneColliderList.Add(colliderList[0]);
+                                }
+                                for (int j = 0; j < colliderList.Count; j++)
+                                {
+                                    if (!boneColliderList.Contains(colliderList[j]))
+                                    {
+                                        boneColliderList.Add(colliderList[j]);
+                                    }
+
+                                }
+                            }
+                        }
+                        Debug.Log("Colliders Added");
+                    }
+                    break;
         }
-        if(GUILayout.Button("Destroy Target Dynamic Bones & Colliders"))
-        {
-            DestroyDynamicBones();
-            EditorUtility.DisplayDialog("Dynamic Bones Copier", "Dynamic Bones Removed", "Ok");
-        }
+
+        
     }
     //~~~~Methods~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     void copyColliders(GameObject source, GameObject target)
@@ -230,8 +338,10 @@ public class DBCopy : EditorWindow
         if (debug) Debug.LogError("Dynamic: Dynamic Bones Transfered");
     }
 
+
+    //~~~~~Helper Methods~~~~~
     //Goes through skeleton
-    Dictionary<string, GameObject> UnpackBones (GameObject bone, Dictionary<string, GameObject> targetBones, String name)
+    Dictionary<string, GameObject> UnpackBones (GameObject bone, Dictionary<string, GameObject> targetBones, string name)
     {
         foreach (Transform child in bone.transform)
         {
@@ -247,6 +357,30 @@ public class DBCopy : EditorWindow
             targetBones = UnpackBones(child.gameObject, targetBones, name); //Recursion
         }
         return targetBones;
+    }
+
+    private List<GameObject> ListDynamicComponents(GameObject source, List<GameObject> list, bool DynamicBones)
+    {
+
+        foreach(Transform obj in source.transform)
+        {
+            if (obj.GetComponent<DynamicBone>() && DynamicBones == true)
+                list.Add(obj.gameObject);
+            else if (obj.GetComponent<DynamicBoneCollider>() && DynamicBones == false)
+                list.Add(obj.gameObject);
+            list = ListDynamicComponents(obj.gameObject, list, DynamicBones);
+        }
+        return list;
+    }
+
+    private List<bool> updateList(List<GameObject> dynamicBones)
+    {
+        List<bool> list = new List<bool>();
+        for(int i = 0; i < dynamicBones.Count; i++)
+        {
+            list.Add(default);
+        }
+        return list;
     }
 
     void DestroyDynamicBones()
